@@ -48,7 +48,7 @@ impl OcrEngine {
         gray_roi: &[u8],
         roi_w: u32,
         roi_h: u32,
-        threshold: u8,
+        _threshold: u8,
     ) -> Result<Option<u32>> {
         let image = GrayImage::from_raw(roi_w, roi_h, gray_roi.to_vec())
             .ok_or_else(|| anyhow!("Invalid grayscale ROI buffer"))?;
@@ -61,8 +61,22 @@ impl OcrEngine {
         for y in 0..self.input_h {
             for x in 0..self.input_w {
                 let px = resized.get_pixel(x, y).0[0];
-                let bw = if px >= threshold { 255.0 } else { 0.0 };
-                let norm = (bw / 255.0 - 0.5) / 0.5;
+
+                // Instead of strict binarization which can ruin green on dark text,
+                // we apply a simple contrast stretch or normalization, adjusting based
+                // on if we want to invert or just normalize.
+                // Text in the UI seems to be bright green/white, background is dark.
+                // Usually PP-OCR expects black text on white background.
+                // So if the pixel is brighter than average, we might want it black, else white.
+                // We'll map the brightness directly and invert it so bright text becomes dark.
+
+                let v = px as f32;
+                // invert the value: 255.0 - v (so white/green text becomes dark, dark background becomes light)
+                let inverted = 255.0 - v;
+
+                // Now normalize to [-1.0, 1.0]
+                let norm = (inverted / 255.0 - 0.5) / 0.5;
+
                 for ch in 0..3 {
                     input[[0, ch, y as usize, x as usize]] = norm;
                 }
