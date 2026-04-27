@@ -114,8 +114,11 @@ fn run_automation_loop(
                 if let Err(err) = background.click_search_field(search.x, search.y) {
                     send_log(&log_tx, format!("Click failed for {}: {}", name, err));
                 } else {
+                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
                     let _ = background.clear_search_field();
+                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
                     let _ = background.type_text(name);
+                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
                     let _ = background.press_enter();
                 }
             } else {
@@ -151,7 +154,10 @@ fn run_automation_loop(
                         }
                     },
                     Err(err) => {
-                        send_log(&log_tx, format!("Screen capture failed for {}: {}", name, err));
+                        send_log(
+                            &log_tx,
+                            format!("Screen capture failed for {}: {}", name, err),
+                        );
                     }
                 }
             } else {
@@ -195,7 +201,10 @@ fn run_automation_loop(
         }
 
         if let Err(err) = config::save_points_state(&points_state) {
-            send_log(&log_tx, format!("Failed to save points_state.json: {}", err));
+            send_log(
+                &log_tx,
+                format!("Failed to save points_state.json: {}", err),
+            );
         }
 
         send_log(
@@ -224,4 +233,3 @@ fn sleep_with_stop(total: Duration, stop_flag: &AtomicBool) {
         slept += step;
     }
 }
-
