@@ -48,13 +48,39 @@ fn run_automation_loop(
     stop_flag: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut points_state: PointsState = config::load_points_state();
-    let mut capture = ScreenCapture::new_primary()?;
+    let mut capture = match ScreenCapture::new_primary() {
+        Ok(capture) => capture,
+        Err(err) => {
+            send_log(&log_tx, format!("Screen capture init failed: {}", err));
+            return Ok(());
+        }
+    };
     let model_path = config::resolve_app_relative(&cfg.model_path);
     let dict_path = config::resolve_app_relative(&cfg.dict_path);
     let model_path_str = model_path.to_string_lossy().to_string();
     let dict_path_str = dict_path.to_string_lossy().to_string();
-    let mut ocr = OcrEngine::new(&model_path_str, &dict_path_str)?;
-    let runtime = Runtime::new()?;
+    let mut ocr = loop {
+        match OcrEngine::new(&model_path_str, &dict_path_str) {
+            Ok(ocr) => break ocr,
+            Err(err) => {
+                send_log(
+                    &log_tx,
+                    format!("OCR init failed: {}. Retrying in 5s...", err),
+                );
+                sleep_with_stop(Duration::from_secs(5), &stop_flag);
+                if stop_flag.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
+            }
+        }
+    };
+    let runtime = match Runtime::new() {
+        Ok(rt) => rt,
+        Err(err) => {
+            send_log(&log_tx, format!("Tokio runtime init failed: {}", err));
+            return Ok(());
+        }
+    };
 
     send_log(&log_tx, "Automation thread started.");
 
