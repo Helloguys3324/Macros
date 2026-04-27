@@ -6,10 +6,10 @@ mod imp {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
+    use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::{VK_BACK, VK_CONTROL, VK_RETURN};
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, PostMessageW, ScreenToClient, MK_LBUTTON, WM_CHAR, WM_KEYDOWN, WM_KEYUP,
+        FindWindowW, GetWindowRect, PostMessageW, WM_CHAR, WM_KEYDOWN, WM_KEYUP,
         WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
     };
 
@@ -23,7 +23,7 @@ mod imp {
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
-            let hwnd = unsafe { FindWindowW(None, PCWSTR(wide.as_ptr())) };
+            let hwnd = unsafe { FindWindowW(None, PCWSTR(wide.as_ptr()))? };
             if hwnd.0 == 0 {
                 bail!("Game window not found by exact title: {}", window_title);
             }
@@ -34,7 +34,7 @@ mod imp {
             let (cx, cy) = self.screen_to_client(x, y)?;
             let lp = make_mouse_lparam(cx, cy);
             self.post(WM_MOUSEMOVE, WPARAM(0), lp)?;
-            self.post(WM_LBUTTONDOWN, WPARAM(MK_LBUTTON as usize), lp)?;
+            self.post(WM_LBUTTONDOWN, WPARAM(1), lp)?;
             self.post(WM_LBUTTONUP, WPARAM(0), lp)?;
             Ok(())
         }
@@ -76,22 +76,14 @@ mod imp {
             wparam: WPARAM,
             lparam: LPARAM,
         ) -> Result<()> {
-            let ok = unsafe { PostMessageW(self.hwnd, msg, wparam, lparam).as_bool() };
-            if ok {
-                Ok(())
-            } else {
-                bail!("PostMessageW failed for message {}", msg);
-            }
+            unsafe { PostMessageW(self.hwnd, msg, wparam, lparam)? };
+            Ok(())
         }
 
         fn screen_to_client(&self, x: i32, y: i32) -> Result<(i32, i32)> {
-            let mut point = POINT { x, y };
-            let ok = unsafe { ScreenToClient(self.hwnd, &mut point).as_bool() };
-            if ok {
-                Ok((point.x, point.y))
-            } else {
-                bail!("ScreenToClient failed");
-            }
+            let mut rect = RECT::default();
+            unsafe { GetWindowRect(self.hwnd, &mut rect)? };
+            Ok((x - rect.left, y - rect.top))
         }
     }
 

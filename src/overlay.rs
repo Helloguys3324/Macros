@@ -86,7 +86,8 @@ fn run_overlay(mode: OverlayMode) -> Result<()> {
         "Overlay Selector",
         native_options,
         Box::new(move |_cc| Ok(Box::new(OverlayApp::new(mode, Arc::clone(&result_clone))))),
-    )?;
+    )
+    .map_err(|e| anyhow!(e.to_string()))?;
 
     if let Some(result) = *shared_result.lock().map_err(|_| anyhow!("Overlay mutex poisoned"))? {
         println!("{}", serde_json::to_string(&result)?);

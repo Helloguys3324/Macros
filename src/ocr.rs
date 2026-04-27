@@ -1,19 +1,14 @@
 use anyhow::{anyhow, Context, Result};
 use image::{imageops::FilterType, GrayImage};
-use ndarray::{Array4, IxDyn};
+use ndarray::{Array4, ArrayViewD};
 use ort::{
-    environment::Environment,
-    session::SessionBuilder,
-    tensor::OrtOwnedTensor,
-    GraphOptimizationLevel,
-    LoggingLevel,
+    session::{builder::GraphOptimizationLevel, Session},
+    value::TensorRef,
 };
 use std::fs;
-use std::sync::Arc;
 
 pub struct OcrEngine {
-    _env: Arc<Environment>,
-    session: ort::session::Session,
+    session: Session,
     dict: Vec<char>,
     input_w: u32,
     input_h: u32,
@@ -21,16 +16,9 @@ pub struct OcrEngine {
 
 impl OcrEngine {
     pub fn new(model_path: &str, dict_path: &str) -> Result<Self> {
-        let env = Arc::new(
-            Environment::builder()
-                .with_name("clan-tracker-ocr")
-                .with_log_level(LoggingLevel::Warning)
-                .build()?,
-        );
-
-        let session = SessionBuilder::new(&env)?
+        let session = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .with_model_from_file(model_path)?;
+            .commit_from_file(model_path)?;
 
         let dict_raw = fs::read_to_string(dict_path)
             .with_context(|| format!("Failed to read OCR dictionary: {}", dict_path))?;
@@ -44,7 +32,6 @@ impl OcrEngine {
         }
 
         Ok(Self {
-            _env: env,
             session,
             dict,
             input_w: 320,
@@ -87,11 +74,11 @@ impl OcrEngine {
             }
         }
 
-        let outputs: Vec<OrtOwnedTensor<f32, IxDyn>> = self.session.run(vec![input])?;
-        let logits = outputs
-            .get(0)
-            .context("OCR model returned no outputs")?
-            .view();
+        let input_tensor = TensorRef::from_array_view(input.view())?;
+        let outputs = self.session.run(ort::inputs![input_tensor])?;
+        let logits = outputs[0]
+            .try_extract_array::<f32>()
+            .context("Failed to extract OCR output tensor as f32 array")?;
         let shape = logits.shape().to_vec();
 
         let decoded = match shape.as_slice() {
@@ -110,7 +97,7 @@ impl OcrEngine {
 }
 
 fn decode_ctc_3d(
-    logits: &ndarray::ArrayViewD<'_, f32>,
+    logits: &ArrayViewD<'_, f32>,
     timesteps: usize,
     classes: usize,
     dict: &[char],
@@ -142,7 +129,7 @@ fn decode_ctc_3d(
 }
 
 fn decode_ctc_2d(
-    logits: &ndarray::ArrayViewD<'_, f32>,
+    logits: &ArrayViewD<'_, f32>,
     timesteps: usize,
     classes: usize,
     dict: &[char],

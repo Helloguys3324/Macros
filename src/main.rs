@@ -8,9 +8,14 @@ mod ocr;
 mod overlay;
 mod ui;
 
-use anyhow::Result;
+fn main() {
+    if let Err(err) = run() {
+        eprintln!("fatal: {}", err);
+        std::process::exit(1);
+    }
+}
 
-fn main() -> Result<()> {
+fn run() -> anyhow::Result<()> {
     if overlay::try_run_overlay_from_cli()? {
         return Ok(());
     }
@@ -20,7 +25,8 @@ fn main() -> Result<()> {
         "Clan Tracking Bot",
         options,
         Box::new(|_cc| Ok(Box::new(ui::ClanTrackerApp::new()))),
-    )?;
+    )
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     Ok(())
 }
