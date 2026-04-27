@@ -12,12 +12,11 @@ mod imp {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-        MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, VK_BACK, VK_CONTROL, VK_RETURN,
+        KEYEVENTF_UNICODE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        VK_BACK, VK_CONTROL, VK_RETURN,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        FindWindowW, SetForegroundWindow,
     };
 
     pub struct BackgroundInput {
@@ -46,9 +45,7 @@ mod imp {
             thread::sleep(Duration::from_millis(150));
 
             unsafe {
-                if !SetCursorPos(x, y).as_bool() {
-                    bail!("SetCursorPos failed");
-                }
+                SetCursorPos(x, y)?;
             }
             thread::sleep(Duration::from_millis(100));
 
