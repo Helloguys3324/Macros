@@ -11,9 +11,9 @@ mod imp {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+        SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
         KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-        MOUSEEVENTF_MOVE, MOUSEINPUT, VK_BACK, VK_CONTROL, VK_RETURN,
+        MOUSEEVENTF_MOVE, VK_BACK, VK_CONTROL, VK_RETURN,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXSCREEN, SM_CYSCREEN,
@@ -65,15 +65,16 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
-            self.send_key_input(VK_CONTROL.0, 0)?;
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
+            self.send_key_input(VK_CONTROL.0, empty_flags)?;
             thread::sleep(Duration::from_millis(20));
-            self.send_key_input(0x41, 0)?; // 'A'
+            self.send_key_input(0x41, empty_flags)?; // 'A'
             thread::sleep(Duration::from_millis(20));
             self.send_key_input(0x41, KEYEVENTF_KEYUP)?;
             thread::sleep(Duration::from_millis(20));
             self.send_key_input(VK_CONTROL.0, KEYEVENTF_KEYUP)?;
             thread::sleep(Duration::from_millis(20));
-            self.send_key_input(VK_BACK.0, 0)?;
+            self.send_key_input(VK_BACK.0, empty_flags)?;
             thread::sleep(Duration::from_millis(20));
             self.send_key_input(VK_BACK.0, KEYEVENTF_KEYUP)?;
             Ok(())
@@ -83,8 +84,9 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
             for ch in text.encode_utf16() {
-                self.send_unicode_char(ch, 0)?;
+                self.send_unicode_char(ch, empty_flags)?;
                 thread::sleep(Duration::from_millis(10));
                 self.send_unicode_char(ch, KEYEVENTF_KEYUP)?;
                 thread::sleep(Duration::from_millis(10));
@@ -96,8 +98,9 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
             for _ in 0..2 {
-                self.send_key_input(VK_RETURN.0, 0)?;
+                self.send_key_input(VK_RETURN.0, empty_flags)?;
                 thread::sleep(Duration::from_millis(20));
                 self.send_key_input(VK_RETURN.0, KEYEVENTF_KEYUP)?;
                 thread::sleep(Duration::from_millis(20));
@@ -107,7 +110,7 @@ mod imp {
 
         fn send_mouse_input(&self, dx: i32, dy: i32, flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS) -> Result<()> {
             let mut input = INPUT::default();
-            input.type_ = INPUT_MOUSE;
+            input.r#type = INPUT_MOUSE;
             input.Anonymous.mi.dx = dx;
             input.Anonymous.mi.dy = dy;
             input.Anonymous.mi.dwFlags = flags;
@@ -120,9 +123,9 @@ mod imp {
             Ok(())
         }
 
-        fn send_key_input(&self, vk: u16, flags: windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS) -> Result<()> {
+        fn send_key_input(&self, vk: u16, flags: KEYBD_EVENT_FLAGS) -> Result<()> {
             let mut input = INPUT::default();
-            input.type_ = INPUT_KEYBOARD;
+            input.r#type = INPUT_KEYBOARD;
             input.Anonymous.ki.wVk = windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk);
             input.Anonymous.ki.dwFlags = flags;
 
@@ -134,9 +137,9 @@ mod imp {
             Ok(())
         }
 
-        fn send_unicode_char(&self, ch: u16, flags: windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS) -> Result<()> {
+        fn send_unicode_char(&self, ch: u16, flags: KEYBD_EVENT_FLAGS) -> Result<()> {
             let mut input = INPUT::default();
-            input.type_ = INPUT_KEYBOARD;
+            input.r#type = INPUT_KEYBOARD;
             input.Anonymous.ki.wScan = ch;
             input.Anonymous.ki.dwFlags = flags | KEYEVENTF_UNICODE;
 
