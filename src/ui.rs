@@ -4,7 +4,6 @@ use crate::models::{AppConfig, Point, Roi};
 use eframe::egui;
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::{Duration, Instant};
 
 pub struct ClanTrackerApp {
     cfg: AppConfig,
@@ -13,10 +12,8 @@ pub struct ClanTrackerApp {
     log_tx: Sender<String>,
     log_rx: Receiver<String>,
     worker: Option<AutomationHandle>,
-    capture_search_at: Option<Instant>,
-    capture_roi_start_at: Option<Instant>,
-    capture_roi_end_at: Option<Instant>,
-    roi_start_point: Option<Point>,
+    overlay_rx: std::sync::mpsc::Receiver<OverlayEvent>,
+    overlay_tx: std::sync::mpsc::Sender<OverlayEvent>,
 }
 
 impl ClanTrackerApp {
@@ -33,6 +30,7 @@ impl ClanTrackerApp {
             }
         }
         let (log_tx, log_rx) = mpsc::channel();
+        let (tx, rx) = mpsc::channel();
 
         Self {
             cfg,
@@ -41,10 +39,8 @@ impl ClanTrackerApp {
             log_tx,
             log_rx,
             worker: None,
-            capture_search_at: None,
-            capture_roi_start_at: None,
-            capture_roi_end_at: None,
-            roi_start_point: None,
+            overlay_rx: rx,
+            overlay_tx: tx,
         }
     }
 
@@ -119,57 +115,22 @@ impl ClanTrackerApp {
         }
     }
 
-    fn process_capture_timers(&mut self) {
-        let now = Instant::now();
-
-        if let Some(deadline) = self.capture_search_at {
-            if now >= deadline {
-                self.capture_search_at = None;
-                match capture_cursor_point() {
-                    Ok(point) => {
-                        self.cfg.search_field = Some(point);
-                        self.push_log(format!(
-                            "Search field point set to ({}, {}).",
-                            point.x, point.y
-                        ));
-                    }
-                    Err(err) => self.push_log(format!("Search point capture failed: {}", err)),
+    fn process_overlay_events(&mut self) {
+        while let Ok(event) = self.overlay_rx.try_recv() {
+            match event {
+                OverlayEvent::PointSelected(point) => {
+                    self.cfg.search_field = Some(point);
+                    self.push_log(format!("Search field point set to ({}, {}).", point.x, point.y));
                 }
-            }
-        }
-
-        if let Some(deadline) = self.capture_roi_start_at {
-            if now >= deadline {
-                self.capture_roi_start_at = None;
-                match capture_cursor_point() {
-                    Ok(point) => {
-                        self.roi_start_point = Some(point);
-                        self.push_log(format!(
-                            "ROI start captured at ({}, {}). Now click 'Capture ROI End (3s)'.",
-                            point.x, point.y
-                        ));
-                    }
-                    Err(err) => self.push_log(format!("ROI start capture failed: {}", err)),
+                OverlayEvent::RoiSelected(roi) => {
+                    self.cfg.number_roi = Some(roi);
+                    self.push_log(format!(
+                        "ROI set to x={} y={} w={} h={}.",
+                        roi.x, roi.y, roi.w, roi.h
+                    ));
                 }
-            }
-        }
-
-        if let Some(deadline) = self.capture_roi_end_at {
-            if now >= deadline {
-                self.capture_roi_end_at = None;
-                match (self.roi_start_point, capture_cursor_point()) {
-                    (Some(start), Ok(end)) => {
-                        let roi = roi_from_points(start, end);
-                        self.cfg.number_roi = Some(roi);
-                        self.push_log(format!(
-                            "ROI set to x={} y={} w={} h={}.",
-                            roi.x, roi.y, roi.w, roi.h
-                        ));
-                    }
-                    (None, _) => {
-                        self.push_log("ROI end capture ignored: first capture ROI start.");
-                    }
-                    (_, Err(err)) => self.push_log(format!("ROI end capture failed: {}", err)),
+                OverlayEvent::Error(err) => {
+                    self.push_log(format!("Overlay error: {}", err));
                 }
             }
         }
@@ -179,7 +140,7 @@ impl ClanTrackerApp {
 impl eframe::App for ClanTrackerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.pull_logs();
-        self.process_capture_timers();
+        self.process_overlay_events();
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Clan Tracking Bot");
@@ -247,25 +208,24 @@ impl eframe::App for ClanTrackerApp {
             );
 
             ui.horizontal(|ui| {
-                if ui.button("Capture Search Point (3s)").clicked() {
-                    self.capture_search_at = Some(Instant::now() + Duration::from_secs(3));
-                    self.push_log(
-                        "Place cursor over search bar in game. Capturing in 3 seconds...",
-                    );
+                if ui.button("Select Search Point").clicked() {
+                    let tx = self.overlay_tx.clone();
+                    std::thread::spawn(move || {
+                        match crate::overlay::select_search_field_point() {
+                            Ok(point) => { let _ = tx.send(OverlayEvent::PointSelected(point)); }
+                            Err(e) => { let _ = tx.send(OverlayEvent::Error(e.to_string())); }
+                        }
+                    });
                 }
 
-                if ui.button("Capture ROI Start (3s)").clicked() {
-                    self.capture_roi_start_at = Some(Instant::now() + Duration::from_secs(3));
-                    self.push_log(
-                        "Place cursor at TOP-LEFT of points area. Capturing in 3 seconds...",
-                    );
-                }
-
-                if ui.button("Capture ROI End (3s)").clicked() {
-                    self.capture_roi_end_at = Some(Instant::now() + Duration::from_secs(3));
-                    self.push_log(
-                        "Place cursor at BOTTOM-RIGHT of points area. Capturing in 3 seconds...",
-                    );
+                if ui.button("Select Points Area (ROI)").clicked() {
+                    let tx = self.overlay_tx.clone();
+                    std::thread::spawn(move || {
+                        match crate::overlay::select_number_roi_rect() {
+                            Ok(roi) => { let _ = tx.send(OverlayEvent::RoiSelected(roi)); }
+                            Err(e) => { let _ = tx.send(OverlayEvent::Error(e.to_string())); }
+                        }
+                    });
                 }
             });
 
@@ -344,30 +304,8 @@ impl Drop for ClanTrackerApp {
     }
 }
 
-fn roi_from_points(start: Point, end: Point) -> Roi {
-    let left = start.x.min(end.x).max(0) as u32;
-    let top = start.y.min(end.y).max(0) as u32;
-    let w = (start.x - end.x).unsigned_abs().max(1);
-    let h = (start.y - end.y).unsigned_abs().max(1);
-    Roi {
-        x: left,
-        y: top,
-        w,
-        h,
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn capture_cursor_point() -> std::result::Result<Point, String> {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
-
-    let mut p = POINT::default();
-    unsafe { GetCursorPos(&mut p).map_err(|e| e.to_string())? };
-    Ok(Point { x: p.x, y: p.y })
-}
-
-#[cfg(not(target_os = "windows"))]
-fn capture_cursor_point() -> std::result::Result<Point, String> {
-    Err("Cursor capture is only supported on Windows".to_string())
+enum OverlayEvent {
+    PointSelected(Point),
+    RoiSelected(Roi),
+    Error(String),
 }

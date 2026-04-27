@@ -38,27 +38,18 @@ mod imp {
         }
 
         pub fn click_search_field(&self, x: i32, y: i32) -> Result<()> {
+            use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
+
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
             thread::sleep(Duration::from_millis(150));
 
-            // Use virtual screen metrics for multi-monitor support
-            let virtual_x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
-            let virtual_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
-            let screen_w = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
-            let screen_h = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
-
-            // Calculate absolute coordinates based on the entire virtual desktop
-            let abs_x = (((x - virtual_x) as f32 / screen_w as f32) * 65535.0) as i32;
-            let abs_y = (((y - virtual_y) as f32 / screen_h as f32) * 65535.0) as i32;
-
-            // Move the mouse using absolute virtual desktop coordinates
-            self.send_mouse_input(
-                abs_x,
-                abs_y,
-                MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
-            )?;
+            unsafe {
+                if !SetCursorPos(x, y).as_bool() {
+                    bail!("SetCursorPos failed");
+                }
+            }
             thread::sleep(Duration::from_millis(100));
 
             for _ in 0..2 {
