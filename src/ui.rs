@@ -17,8 +17,17 @@ pub struct ClanTrackerApp {
 
 impl ClanTrackerApp {
     pub fn new() -> Self {
-        let cfg = config::load_config();
-        let members_text = cfg.members.join("\n");
+        let mut cfg = config::load_config();
+        let _ = config::ensure_members_file(&cfg.members_file);
+        let mut members_text = cfg.members.join("\n");
+        if members_text.trim().is_empty() {
+            if let Ok(from_file) = config::load_members_file(&cfg.members_file) {
+                if !from_file.is_empty() {
+                    cfg.members = from_file.clone();
+                    members_text = from_file.join("\n");
+                }
+            }
+        }
         let (log_tx, log_rx) = mpsc::channel();
 
         Self {
@@ -54,8 +63,22 @@ impl ClanTrackerApp {
             .collect();
 
         if self.cfg.members.is_empty() {
+            if let Ok(from_file) = config::load_members_file(&self.cfg.members_file) {
+                if !from_file.is_empty() {
+                    self.cfg.members = from_file.clone();
+                    self.members_text = from_file.join("\n");
+                    self.push_log("Members loaded from names file.");
+                }
+            }
+        }
+
+        if self.cfg.members.is_empty() {
             self.push_log("Cannot start: members list is empty.");
             return;
+        }
+
+        if let Err(err) = config::save_members_file(&self.cfg.members_file, &self.cfg.members) {
+            self.push_log(format!("Names file save warning: {}", err));
         }
 
         if let Err(err) = config::save_config(&self.cfg) {
@@ -98,6 +121,36 @@ impl eframe::App for ClanTrackerApp {
             ui.separator();
             ui.label("Clan Members (one name per line):");
             ui.add(egui::TextEdit::multiline(&mut self.members_text).desired_rows(10));
+            ui.label("Names File Path:");
+            ui.text_edit_singleline(&mut self.cfg.members_file);
+            ui.horizontal(|ui| {
+                if ui.button("Load Names File").clicked() {
+                    match config::load_members_file(&self.cfg.members_file) {
+                        Ok(members) => {
+                            self.cfg.members = members.clone();
+                            self.members_text = members.join("\n");
+                            self.push_log(format!(
+                                "Loaded {} names from file.",
+                                self.cfg.members.len()
+                            ));
+                        }
+                        Err(err) => self.push_log(format!("Load names file failed: {}", err)),
+                    }
+                }
+                if ui.button("Save Names File").clicked() {
+                    let members = self
+                        .members_text
+                        .lines()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>();
+                    match config::save_members_file(&self.cfg.members_file, &members) {
+                        Ok(()) => self.push_log(format!("Saved {} names to file.", members.len())),
+                        Err(err) => self.push_log(format!("Save names file failed: {}", err)),
+                    }
+                }
+            });
 
             ui.separator();
             ui.label("Discord Webhook URL:");
@@ -192,6 +245,14 @@ impl eframe::App for ClanTrackerApp {
 impl Drop for ClanTrackerApp {
     fn drop(&mut self) {
         self.stop_automation();
+        let members = self
+            .members_text
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        let _ = config::save_members_file(&self.cfg.members_file, &members);
         let _ = config::save_config(&self.cfg);
     }
 }

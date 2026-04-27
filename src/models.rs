@@ -16,8 +16,10 @@ pub struct Roi {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub members: Vec<String>,
+    pub members_file: String,
     pub webhook_url: String,
     pub game_window_title: String,
     pub search_field: Option<Point>,
@@ -33,6 +35,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             members: Vec::new(),
+            members_file: "members.txt".to_string(),
             webhook_url: String::new(),
             game_window_title: "Roblox".to_string(),
             search_field: None,

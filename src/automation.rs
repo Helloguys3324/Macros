@@ -49,7 +49,11 @@ fn run_automation_loop(
 ) -> Result<()> {
     let mut points_state: PointsState = config::load_points_state();
     let mut capture = ScreenCapture::new_primary()?;
-    let mut ocr = OcrEngine::new(&cfg.model_path, &cfg.dict_path)?;
+    let model_path = config::resolve_app_relative(&cfg.model_path);
+    let dict_path = config::resolve_app_relative(&cfg.dict_path);
+    let model_path_str = model_path.to_string_lossy().to_string();
+    let dict_path_str = dict_path.to_string_lossy().to_string();
+    let mut ocr = OcrEngine::new(&model_path_str, &dict_path_str)?;
     let runtime = Runtime::new()?;
 
     send_log(&log_tx, "Automation thread started.");

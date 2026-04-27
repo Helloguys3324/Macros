@@ -1,0 +1,65 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: -C target-feature=+crt-static
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo/target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Verify EXE exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path "target\release\clan_tracking_bot.exe")) {
+            throw "target\release\clan_tracking_bot.exe not found"
+          }
+
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          New-Item -ItemType Directory -Path dist\models -Force | Out-Null
+          Copy-Item "target\release\clan_tracking_bot.exe" "dist\clan_tracking_bot.exe"
+          Get-ChildItem -Path "target\release" -Filter "onnxruntime*.dll" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName "dist\" -Force }
+
+          Invoke-WebRequest -Uri "https://huggingface.co/cycloneboy/ch_PP-OCRv4_rec_server_infer/resolve/main/model.onnx" -OutFile "dist\models\ch_PP-OCRv4_rec_server_infer.onnx" -MaximumRedirection 10
+          Invoke-WebRequest -Uri "https://huggingface.co/cycloneboy/ch_PP-OCRv4_rec_server_infer/resolve/main/ch_dict.txt" -OutFile "dist\models\ch_dict.txt" -MaximumRedirection 10
+
+          if (Test-Path "members.txt") {
+            Copy-Item "members.txt" "dist\members.txt"
+          } else {
+            Set-Content -Path "dist\members.txt" -Value "# One member name per line`n# PlayerOne`n# PlayerTwo`n"
+          }
+
+      - name: Archive package
+        shell: pwsh
+        run: |
+          if (Test-Path "clan-tracking-bot-windows.zip") { Remove-Item "clan-tracking-bot-windows.zip" -Force }
+          Compress-Archive -Path "dist\*" -DestinationPath "clan-tracking-bot-windows.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clan-tracking-bot-windows
+          path: clan-tracking-bot-windows.zip
+          if-no-files-found: error
