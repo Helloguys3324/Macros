@@ -4,15 +4,19 @@ use anyhow::{bail, Result};
 mod imp {
     use super::*;
     use std::ffi::OsStr;
+    use std::mem::size_of;
     use std::os::windows::ffi::OsStrExt;
     use std::thread;
     use std::time::Duration;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
-    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_BACK, VK_CONTROL, VK_RETURN};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+        KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        MOUSEEVENTF_MOVE, MOUSEINPUT, VK_BACK, VK_CONTROL, VK_RETURN,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetWindowRect, PostMessageW, SetForegroundWindow, WM_CHAR, WM_KEYDOWN,
-        WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+        FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXSCREEN, SM_CYSCREEN,
     };
 
     pub struct BackgroundInput {
@@ -36,16 +40,24 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
-            let (cx, cy) = self.screen_to_client(x, y)?;
-            let lp = make_mouse_lparam(cx, cy);
+            thread::sleep(Duration::from_millis(100));
 
-            for _ in 0..10 {
-                self.post(WM_MOUSEMOVE, WPARAM(0), lp)?;
-                self.post(WM_LBUTTONDOWN, WPARAM(1), lp)?;
-                thread::sleep(Duration::from_millis(10));
-                self.post(WM_LBUTTONUP, WPARAM(0), lp)?;
-                thread::sleep(Duration::from_millis(20));
+            let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+            let screen_h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+
+            let abs_x = ((x as f32 / screen_w as f32) * 65535.0) as i32;
+            let abs_y = ((y as f32 / screen_h as f32) * 65535.0) as i32;
+
+            self.send_mouse_input(abs_x, abs_y, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)?;
+            thread::sleep(Duration::from_millis(50));
+
+            for _ in 0..2 {
+                self.send_mouse_input(0, 0, MOUSEEVENTF_LEFTDOWN)?;
+                thread::sleep(Duration::from_millis(50));
+                self.send_mouse_input(0, 0, MOUSEEVENTF_LEFTUP)?;
+                thread::sleep(Duration::from_millis(50));
             }
+
             Ok(())
         }
 
@@ -53,17 +65,17 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
-            self.key_down(VK_CONTROL.0 as u16)?;
+            self.send_key_input(VK_CONTROL.0, 0)?;
             thread::sleep(Duration::from_millis(20));
-            self.key_down(0x41)?;
+            self.send_key_input(0x41, 0)?; // 'A'
             thread::sleep(Duration::from_millis(20));
-            self.key_up(0x41)?;
+            self.send_key_input(0x41, KEYEVENTF_KEYUP)?;
             thread::sleep(Duration::from_millis(20));
-            self.key_up(VK_CONTROL.0 as u16)?;
+            self.send_key_input(VK_CONTROL.0, KEYEVENTF_KEYUP)?;
             thread::sleep(Duration::from_millis(20));
-            self.key_down(VK_BACK.0 as u16)?;
+            self.send_key_input(VK_BACK.0, 0)?;
             thread::sleep(Duration::from_millis(20));
-            self.key_up(VK_BACK.0 as u16)?;
+            self.send_key_input(VK_BACK.0, KEYEVENTF_KEYUP)?;
             Ok(())
         }
 
@@ -72,7 +84,9 @@ mod imp {
                 SetForegroundWindow(self.hwnd);
             }
             for ch in text.encode_utf16() {
-                self.post(WM_CHAR, WPARAM(ch as usize), LPARAM(1))?;
+                self.send_unicode_char(ch, 0)?;
+                thread::sleep(Duration::from_millis(10));
+                self.send_unicode_char(ch, KEYEVENTF_KEYUP)?;
                 thread::sleep(Duration::from_millis(10));
             }
             Ok(())
@@ -82,39 +96,57 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
-            for _ in 0..3 {
-                self.key_down(VK_RETURN.0 as u16)?;
+            for _ in 0..2 {
+                self.send_key_input(VK_RETURN.0, 0)?;
                 thread::sleep(Duration::from_millis(20));
-                self.key_up(VK_RETURN.0 as u16)?;
+                self.send_key_input(VK_RETURN.0, KEYEVENTF_KEYUP)?;
                 thread::sleep(Duration::from_millis(20));
             }
             Ok(())
         }
 
-        fn key_down(&self, vk: u16) -> Result<()> {
-            self.post(WM_KEYDOWN, WPARAM(vk as usize), LPARAM(1))
-        }
+        fn send_mouse_input(&self, dx: i32, dy: i32, flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.type_ = INPUT_MOUSE;
+            input.Anonymous.mi.dx = dx;
+            input.Anonymous.mi.dy = dy;
+            input.Anonymous.mi.dwFlags = flags;
 
-        fn key_up(&self, vk: u16) -> Result<()> {
-            self.post(WM_KEYUP, WPARAM(vk as usize), LPARAM(0xC000_0001))
-        }
-
-        fn post(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Result<()> {
-            unsafe { PostMessageW(self.hwnd, msg, wparam, lparam)? };
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for mouse");
+                }
+            }
             Ok(())
         }
 
-        fn screen_to_client(&self, x: i32, y: i32) -> Result<(i32, i32)> {
-            let mut rect = RECT::default();
-            unsafe { GetWindowRect(self.hwnd, &mut rect)? };
-            Ok((x - rect.left, y - rect.top))
-        }
-    }
+        fn send_key_input(&self, vk: u16, flags: windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.type_ = INPUT_KEYBOARD;
+            input.Anonymous.ki.wVk = windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk);
+            input.Anonymous.ki.dwFlags = flags;
 
-    fn make_mouse_lparam(x: i32, y: i32) -> LPARAM {
-        let xw = (x as u32) & 0xFFFF;
-        let yw = (y as u32) & 0xFFFF;
-        LPARAM(((yw << 16) | xw) as isize)
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for key {}", vk);
+                }
+            }
+            Ok(())
+        }
+
+        fn send_unicode_char(&self, ch: u16, flags: windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.type_ = INPUT_KEYBOARD;
+            input.Anonymous.ki.wScan = ch;
+            input.Anonymous.ki.dwFlags = flags | KEYEVENTF_UNICODE;
+
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for unicode char {}", ch);
+                }
+            }
+            Ok(())
+        }
     }
 }
 
