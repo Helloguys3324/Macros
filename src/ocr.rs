@@ -53,19 +53,10 @@ impl OcrEngine {
         let image = GrayImage::from_raw(roi_w, roi_h, gray_roi.to_vec())
             .ok_or_else(|| anyhow!("Invalid grayscale ROI buffer"))?;
 
-        let resized = image::imageops::resize(
-            &image,
-            self.input_w,
-            self.input_h,
-            FilterType::Triangle,
-        );
+        let resized =
+            image::imageops::resize(&image, self.input_w, self.input_h, FilterType::Triangle);
 
-        let mut input = Array4::<f32>::zeros((
-            1,
-            3,
-            self.input_h as usize,
-            self.input_w as usize,
-        ));
+        let mut input = Array4::<f32>::zeros((1, 3, self.input_h as usize, self.input_w as usize));
 
         for y in 0..self.input_h {
             for x in 0..self.input_w {
@@ -95,12 +86,7 @@ impl OcrEngine {
             _ => return Err(anyhow!("Unexpected OCR output shape: {:?}", shape)),
         };
 
-        let digits: String = decoded.chars().filter(|c| c.is_ascii_digit()).collect();
-        if digits.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(digits.parse::<u32>().ok())
+        Ok(parse_points(&decoded))
     }
 }
 
@@ -168,3 +154,38 @@ fn decode_ctc_2d(
     out
 }
 
+fn parse_points(s: &str) -> Option<u32> {
+    let mut cleaned = String::new();
+    let mut multiplier = 1f64;
+
+    for mut c in s.chars() {
+        match c {
+            'O' | 'o' => c = '0',
+            'l' | 'I' => c = '1',
+            _ => {}
+        }
+
+        if c.is_ascii_digit() || c == '.' {
+            cleaned.push(c);
+        } else if c == ',' {
+            // skip
+        } else if c.eq_ignore_ascii_case(&'k') {
+            multiplier = 1_000.0;
+        } else if c.eq_ignore_ascii_case(&'m') {
+            multiplier = 1_000_000.0;
+        } else if c.eq_ignore_ascii_case(&'b') {
+            multiplier = 1_000_000_000.0;
+        }
+    }
+
+    if cleaned.is_empty() || cleaned == "." {
+        return None;
+    }
+
+    if let Ok(val) = cleaned.parse::<f64>() {
+        let total = val * multiplier;
+        Some(total as u32)
+    } else {
+        None
+    }
+}

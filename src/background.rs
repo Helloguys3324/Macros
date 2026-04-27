@@ -5,12 +5,14 @@ mod imp {
     use super::*;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
+    use std::thread;
+    use std::time::Duration;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::{VK_BACK, VK_CONTROL, VK_RETURN};
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetWindowRect, PostMessageW, WM_CHAR, WM_KEYDOWN, WM_KEYUP,
-        WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+        FindWindowW, GetWindowRect, PostMessageW, SetForegroundWindow, WM_CHAR, WM_KEYDOWN,
+        WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
     };
 
     pub struct BackgroundInput {
@@ -31,34 +33,61 @@ mod imp {
         }
 
         pub fn click_search_field(&self, x: i32, y: i32) -> Result<()> {
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
             let (cx, cy) = self.screen_to_client(x, y)?;
             let lp = make_mouse_lparam(cx, cy);
-            self.post(WM_MOUSEMOVE, WPARAM(0), lp)?;
-            self.post(WM_LBUTTONDOWN, WPARAM(1), lp)?;
-            self.post(WM_LBUTTONUP, WPARAM(0), lp)?;
+
+            for _ in 0..10 {
+                self.post(WM_MOUSEMOVE, WPARAM(0), lp)?;
+                self.post(WM_LBUTTONDOWN, WPARAM(1), lp)?;
+                thread::sleep(Duration::from_millis(10));
+                self.post(WM_LBUTTONUP, WPARAM(0), lp)?;
+                thread::sleep(Duration::from_millis(20));
+            }
             Ok(())
         }
 
         pub fn clear_search_field(&self) -> Result<()> {
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
             self.key_down(VK_CONTROL.0 as u16)?;
+            thread::sleep(Duration::from_millis(20));
             self.key_down(0x41)?;
+            thread::sleep(Duration::from_millis(20));
             self.key_up(0x41)?;
+            thread::sleep(Duration::from_millis(20));
             self.key_up(VK_CONTROL.0 as u16)?;
+            thread::sleep(Duration::from_millis(20));
             self.key_down(VK_BACK.0 as u16)?;
+            thread::sleep(Duration::from_millis(20));
             self.key_up(VK_BACK.0 as u16)?;
             Ok(())
         }
 
         pub fn type_text(&self, text: &str) -> Result<()> {
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
             for ch in text.encode_utf16() {
                 self.post(WM_CHAR, WPARAM(ch as usize), LPARAM(1))?;
+                thread::sleep(Duration::from_millis(10));
             }
             Ok(())
         }
 
         pub fn press_enter(&self) -> Result<()> {
-            self.key_down(VK_RETURN.0 as u16)?;
-            self.key_up(VK_RETURN.0 as u16)?;
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            for _ in 0..3 {
+                self.key_down(VK_RETURN.0 as u16)?;
+                thread::sleep(Duration::from_millis(20));
+                self.key_up(VK_RETURN.0 as u16)?;
+                thread::sleep(Duration::from_millis(20));
+            }
             Ok(())
         }
 
@@ -70,12 +99,7 @@ mod imp {
             self.post(WM_KEYUP, WPARAM(vk as usize), LPARAM(0xC000_0001))
         }
 
-        fn post(
-            &self,
-            msg: u32,
-            wparam: WPARAM,
-            lparam: LPARAM,
-        ) -> Result<()> {
+        fn post(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Result<()> {
             unsafe { PostMessageW(self.hwnd, msg, wparam, lparam)? };
             Ok(())
         }
@@ -124,4 +148,3 @@ mod imp {
 }
 
 pub use imp::BackgroundInput;
-

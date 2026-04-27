@@ -32,6 +32,7 @@ pub fn try_run_overlay_from_cli() -> Result<bool> {
     Ok(false)
 }
 
+#[allow(dead_code)]
 pub fn select_search_field_point() -> Result<Point> {
     let result = run_overlay_subprocess("point")?;
     match result {
@@ -40,6 +41,7 @@ pub fn select_search_field_point() -> Result<Point> {
     }
 }
 
+#[allow(dead_code)]
 pub fn select_number_roi_rect() -> Result<Roi> {
     let result = run_overlay_subprocess("rect")?;
     match result {
@@ -48,12 +50,10 @@ pub fn select_number_roi_rect() -> Result<Roi> {
     }
 }
 
+#[allow(dead_code)]
 fn run_overlay_subprocess(mode: &str) -> Result<OverlayResult> {
     let exe = env::current_exe()?;
-    let output = Command::new(exe)
-        .arg("--overlay")
-        .arg(mode)
-        .output()?;
+    let output = Command::new(exe).arg("--overlay").arg(mode).output()?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -200,28 +200,32 @@ impl eframe::App for OverlayApp {
                 }
             }
 
-            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-                ui.add_space(20.0);
-                match self.mode {
-                    OverlayMode::Point => {
-                        ui.label(
-                            egui::RichText::new("Click to set Search Field Position (Esc to cancel)")
+            ui.with_layout(
+                egui::Layout::top_down_justified(egui::Align::Center),
+                |ui| {
+                    ui.add_space(20.0);
+                    match self.mode {
+                        OverlayMode::Point => {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Click to set Search Field Position (Esc to cancel)",
+                                )
                                 .color(egui::Color32::WHITE)
                                 .strong(),
-                        );
+                            );
+                        }
+                        OverlayMode::Rect => {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Drag to set Points ROI Rectangle (Esc to cancel)",
+                                )
+                                .color(egui::Color32::WHITE)
+                                .strong(),
+                            );
+                        }
                     }
-                    OverlayMode::Rect => {
-                        ui.label(
-                            egui::RichText::new(
-                                "Drag to set Points ROI Rectangle (Esc to cancel)",
-                            )
-                            .color(egui::Color32::WHITE)
-                            .strong(),
-                        );
-                    }
-                }
-            });
+                },
+            );
         });
     }
 }
-
