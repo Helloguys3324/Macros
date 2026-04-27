@@ -24,7 +24,7 @@ mod imp {
                 .chain(std::iter::once(0))
                 .collect();
             let hwnd = unsafe { FindWindowW(None, PCWSTR(wide.as_ptr()))? };
-            if hwnd.0 == 0 {
+            if hwnd.0.is_null() {
                 bail!("Game window not found by exact title: {}", window_title);
             }
             Ok(Self { hwnd })

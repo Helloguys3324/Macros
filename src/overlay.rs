@@ -89,7 +89,14 @@ fn run_overlay(mode: OverlayMode) -> Result<()> {
     )
     .map_err(|e| anyhow!(e.to_string()))?;
 
-    if let Some(result) = *shared_result.lock().map_err(|_| anyhow!("Overlay mutex poisoned"))? {
+    let selected = {
+        let guard = shared_result
+            .lock()
+            .map_err(|_| anyhow!("Overlay mutex poisoned"))?;
+        *guard
+    };
+
+    if let Some(result) = selected {
         println!("{}", serde_json::to_string(&result)?);
         Ok(())
     } else {

@@ -16,9 +16,13 @@ pub struct OcrEngine {
 
 impl OcrEngine {
     pub fn new(model_path: &str, dict_path: &str) -> Result<Self> {
-        let session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .commit_from_file(model_path)?;
+        let builder = Session::builder().map_err(|e| anyhow!(e.to_string()))?;
+        let builder = builder
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| anyhow!(e.to_string()))?;
+        let session = builder
+            .commit_from_file(model_path)
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         let dict_raw = fs::read_to_string(dict_path)
             .with_context(|| format!("Failed to read OCR dictionary: {}", dict_path))?;
@@ -74,8 +78,12 @@ impl OcrEngine {
             }
         }
 
-        let input_tensor = TensorRef::from_array_view(input.view())?;
-        let outputs = self.session.run(ort::inputs![input_tensor])?;
+        let input_tensor =
+            TensorRef::from_array_view(input.view()).map_err(|e| anyhow!(e.to_string()))?;
+        let outputs = self
+            .session
+            .run(ort::inputs![input_tensor])
+            .map_err(|e| anyhow!(e.to_string()))?;
         let logits = outputs[0]
             .try_extract_array::<f32>()
             .context("Failed to extract OCR output tensor as f32 array")?;
