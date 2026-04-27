@@ -1,2 +1,0 @@
-1. **Fix Windows API Error Handling**: Update `src/background.rs` to correctly handle the `Result<()>` returned by `SetCursorPos` in newer versions of the `windows-rs` crate, instead of incorrectly calling `.as_bool()` on a `Result`.
-2. **Clean Up Unused Imports**: Remove unused constants (`MOUSEEVENTF_ABSOLUTE`, `SM_CXVIRTUALSCREEN`, etc.) that were left behind when transitioning from absolute relative mouse coordinates to `SetCursorPos`.
