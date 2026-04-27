@@ -17,7 +17,7 @@ pub struct OcrEngine {
 impl OcrEngine {
     pub fn new(model_path: &str, dict_path: &str) -> Result<Self> {
         let builder = Session::builder().map_err(|e| anyhow!(e.to_string()))?;
-        let builder = builder
+        let mut builder = builder
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(|e| anyhow!(e.to_string()))?;
         let session = builder
