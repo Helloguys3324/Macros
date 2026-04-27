@@ -68,4 +68,3 @@ pub struct ScanSummary {
     pub rows: Vec<MemberScan>,
     pub total_points_gained: u32,
 }
-

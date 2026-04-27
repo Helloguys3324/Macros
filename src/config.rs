@@ -102,4 +102,3 @@ fn app_dir() -> PathBuf {
     }
     env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
-

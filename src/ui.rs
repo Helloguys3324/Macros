@@ -167,9 +167,7 @@ impl ClanTrackerApp {
                         ));
                     }
                     (None, _) => {
-                        self.push_log(
-                            "ROI end capture ignored: first capture ROI start.",
-                        );
+                        self.push_log("ROI end capture ignored: first capture ROI start.");
                     }
                     (_, Err(err)) => self.push_log(format!("ROI end capture failed: {}", err)),
                 }
@@ -289,8 +287,17 @@ impl eframe::App for ClanTrackerApp {
             ui.separator();
             ui.horizontal(|ui| {
                 if self.worker.is_none() {
-                    let can_start =
+                    let mut can_start =
                         self.cfg.search_field.is_some() && self.cfg.number_roi.is_some();
+                    let mut err_msg = "Set Search Field and ROI before start.";
+
+                    if let Some(roi) = self.cfg.number_roi {
+                        if roi.w < 10 || roi.h < 10 {
+                            can_start = false;
+                            err_msg = "ROI is too small. Please recapture a larger rectangle.";
+                        }
+                    }
+
                     if ui
                         .add_enabled(can_start, egui::Button::new("Start Automation"))
                         .clicked()
@@ -300,7 +307,7 @@ impl eframe::App for ClanTrackerApp {
                     if !can_start {
                         ui.colored_label(
                             egui::Color32::YELLOW,
-                            "Set Search Field and ROI before start.",
+                            err_msg,
                         );
                     }
                 } else if ui.button("Stop").clicked() {
@@ -342,7 +349,12 @@ fn roi_from_points(start: Point, end: Point) -> Roi {
     let top = start.y.min(end.y).max(0) as u32;
     let w = (start.x - end.x).unsigned_abs().max(1);
     let h = (start.y - end.y).unsigned_abs().max(1);
-    Roi { x: left, y: top, w, h }
+    Roi {
+        x: left,
+        y: top,
+        w,
+        h,
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -359,4 +371,3 @@ fn capture_cursor_point() -> std::result::Result<Point, String> {
 fn capture_cursor_point() -> std::result::Result<Point, String> {
     Err("Cursor capture is only supported on Windows".to_string())
 }
-

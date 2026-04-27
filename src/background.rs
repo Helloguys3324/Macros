@@ -13,10 +13,11 @@ mod imp {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
         KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-        MOUSEEVENTF_MOVE, VK_BACK, VK_CONTROL, VK_RETURN,
+        MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, VK_BACK, VK_CONTROL, VK_RETURN,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXSCREEN, SM_CYSCREEN,
+        FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
 
     pub struct BackgroundInput {
@@ -40,16 +41,25 @@ mod imp {
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
+            thread::sleep(Duration::from_millis(150));
+
+            // Use virtual screen metrics for multi-monitor support
+            let virtual_x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+            let virtual_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+            let screen_w = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+            let screen_h = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+
+            // Calculate absolute coordinates based on the entire virtual desktop
+            let abs_x = (((x - virtual_x) as f32 / screen_w as f32) * 65535.0) as i32;
+            let abs_y = (((y - virtual_y) as f32 / screen_h as f32) * 65535.0) as i32;
+
+            // Move the mouse using absolute virtual desktop coordinates
+            self.send_mouse_input(
+                abs_x,
+                abs_y,
+                MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+            )?;
             thread::sleep(Duration::from_millis(100));
-
-            let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-            let screen_h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
-
-            let abs_x = ((x as f32 / screen_w as f32) * 65535.0) as i32;
-            let abs_y = ((y as f32 / screen_h as f32) * 65535.0) as i32;
-
-            self.send_mouse_input(abs_x, abs_y, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)?;
-            thread::sleep(Duration::from_millis(50));
 
             for _ in 0..2 {
                 self.send_mouse_input(0, 0, MOUSEEVENTF_LEFTDOWN)?;
@@ -87,9 +97,9 @@ mod imp {
             let empty_flags = KEYBD_EVENT_FLAGS(0);
             for ch in text.encode_utf16() {
                 self.send_unicode_char(ch, empty_flags)?;
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(15));
                 self.send_unicode_char(ch, KEYEVENTF_KEYUP)?;
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(15));
             }
             Ok(())
         }
@@ -101,14 +111,19 @@ mod imp {
             let empty_flags = KEYBD_EVENT_FLAGS(0);
             for _ in 0..2 {
                 self.send_key_input(VK_RETURN.0, empty_flags)?;
-                thread::sleep(Duration::from_millis(20));
+                thread::sleep(Duration::from_millis(30));
                 self.send_key_input(VK_RETURN.0, KEYEVENTF_KEYUP)?;
-                thread::sleep(Duration::from_millis(20));
+                thread::sleep(Duration::from_millis(30));
             }
             Ok(())
         }
 
-        fn send_mouse_input(&self, dx: i32, dy: i32, flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS) -> Result<()> {
+        fn send_mouse_input(
+            &self,
+            dx: i32,
+            dy: i32,
+            flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS,
+        ) -> Result<()> {
             let mut input = INPUT::default();
             input.r#type = INPUT_MOUSE;
             input.Anonymous.mi.dx = dx;

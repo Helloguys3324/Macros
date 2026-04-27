@@ -51,4 +51,3 @@ pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()
 
     Ok(())
 }
-
