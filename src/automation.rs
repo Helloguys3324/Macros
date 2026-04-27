@@ -114,11 +114,11 @@ fn run_automation_loop(
                 if let Err(err) = background.click_search_field(search.x, search.y) {
                     send_log(&log_tx, format!("Click failed for {}: {}", name, err));
                 } else {
-                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
+                    sleep_with_stop(Duration::from_millis(250), &stop_flag);
                     let _ = background.clear_search_field();
-                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
+                    sleep_with_stop(Duration::from_millis(250), &stop_flag);
                     let _ = background.type_text(name);
-                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
+                    sleep_with_stop(Duration::from_millis(250), &stop_flag);
                     let _ = background.press_enter();
                 }
             } else {

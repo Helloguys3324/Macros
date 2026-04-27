@@ -30,4 +30,3 @@ fn run() -> anyhow::Result<()> {
 
     Ok(())
 }
-

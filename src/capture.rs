@@ -16,10 +16,7 @@ enum Backend {
         height: usize,
     },
     #[cfg(target_os = "windows")]
-    Gdi {
-        width: usize,
-        height: usize,
-    },
+    Gdi { width: usize, height: usize },
 }
 
 impl ScreenCapture {
@@ -233,4 +230,3 @@ fn capture_with_gdi(width: usize, height: usize, roi: Roi) -> Result<Vec<u8>> {
         Ok(gray)
     }
 }
-
