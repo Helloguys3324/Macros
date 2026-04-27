@@ -55,6 +55,10 @@ fn run_automation_loop(
             return Ok(());
         }
     };
+    send_log(
+        &log_tx,
+        format!("Screen capture backend: {}", capture.backend_name()),
+    );
     let model_path = config::resolve_app_relative(&cfg.model_path);
     let dict_path = config::resolve_app_relative(&cfg.dict_path);
     let model_path_str = model_path.to_string_lossy().to_string();
