@@ -117,9 +117,9 @@ mod imp {
             let empty_flags = KEYBD_EVENT_FLAGS(0);
 
             self.send_scancode(0x0E, empty_flags)?;
-            thread::sleep(Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(100));
             self.send_scancode(0x0E, KEYEVENTF_KEYUP)?;
-            thread::sleep(Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(100));
 
             Ok(())
         }
