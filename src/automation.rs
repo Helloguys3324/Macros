@@ -117,7 +117,8 @@ fn run_automation_loop(
                     sleep_with_stop(Duration::from_millis(250), &stop_flag);
                     let _ = background.clear_search_field();
                     sleep_with_stop(Duration::from_millis(250), &stop_flag);
-                    let _ = background.type_text(name);
+                    let clean_name = name.trim().replace(|c: char| c.is_whitespace(), "");
+                    let _ = background.type_text(&clean_name);
                     sleep_with_stop(Duration::from_millis(250), &stop_flag);
                     let _ = background.press_enter();
                 }

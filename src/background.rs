@@ -115,12 +115,13 @@ mod imp {
                 SetForegroundWindow(self.hwnd);
             }
             let empty_flags = KEYBD_EVENT_FLAGS(0);
-            for _ in 0..2 {
-                self.send_key_input(VK_RETURN.0, empty_flags)?;
-                thread::sleep(Duration::from_millis(30));
-                self.send_key_input(VK_RETURN.0, KEYEVENTF_KEYUP)?;
-                thread::sleep(Duration::from_millis(30));
-            }
+
+            // Only press enter once to prevent game engine quirks adding whitespace
+            self.send_key_input(VK_RETURN.0, empty_flags)?;
+            thread::sleep(Duration::from_millis(50));
+            self.send_key_input(VK_RETURN.0, KEYEVENTF_KEYUP)?;
+            thread::sleep(Duration::from_millis(50));
+
             Ok(())
         }
 

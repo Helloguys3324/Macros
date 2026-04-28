@@ -56,20 +56,32 @@ impl OcrEngine {
         // Save debug image of what was captured directly from screen
         let _ = image.save("debug_raw_roi.png");
 
+        // Calculate padding to preserve aspect ratio
+        let target_h = self.input_h;
+        let target_w = self.input_w;
+
+        // Scale to 48px height, preserve width
+        let scale = target_h as f32 / image.height() as f32;
+        let scaled_w = (image.width() as f32 * scale).round() as u32;
+
         let resized =
-            image::imageops::resize(&image, self.input_w, self.input_h, FilterType::Triangle);
+            image::imageops::resize(&image, scaled_w, target_h, FilterType::Triangle);
 
-        let mut debug_bin = GrayImage::new(self.input_w, self.input_h);
+        let mut debug_bin = GrayImage::new(target_w, target_h);
 
-        let mut input = Array4::<f32>::zeros((1, 3, self.input_h as usize, self.input_w as usize));
+        let mut input = Array4::<f32>::zeros((1, 3, target_h as usize, target_w as usize));
 
-        for y in 0..self.input_h {
-            for x in 0..self.input_w {
-                let px = resized.get_pixel(x, y).0[0];
+        for y in 0..target_h {
+            for x in 0..target_w {
+                let px = if x < scaled_w {
+                    resized.get_pixel(x, y).0[0]
+                } else {
+                    // Fill padding with background color (dark) so it becomes white after binarization
+                    0
+                };
 
                 // Use user-defined threshold. Text is bright green, background is dark.
                 // We want the bright text to become black (0.0) and dark background to become white (255.0).
-                // If it's a white text background, text is usually > 150.
                 let binarized = if px >= threshold { 0.0 } else { 255.0 };
 
                 debug_bin.put_pixel(x, y, image::Luma([binarized as u8]));
