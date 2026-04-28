@@ -125,10 +125,6 @@ fn run_automation_loop(
                     send_log(&log_tx, format!("Raw name bytes for input: {:?}", raw_bytes));
 
                     let _ = background.type_text(&clean_name);
-                    sleep_with_stop(Duration::from_millis(1200), &stop_flag);
-                    let _ = background.press_backspace();
-                    sleep_with_stop(Duration::from_millis(300), &stop_flag);
-                    let _ = background.press_enter();
                 }
             } else {
                 send_log(&log_tx, "Search field point is not configured.");
@@ -139,7 +135,8 @@ fn run_automation_loop(
                 break;
             }
 
-            if let Some(roi) = cfg.number_roi {
+            if cfg.search_field.is_some() {
+                if let Some(roi) = cfg.number_roi {
                 match capture.capture_roi_grayscale(roi) {
                     Ok(gray) => match ocr.read_points(&gray, roi.w, roi.h, cfg.ocr_threshold) {
                         Ok(Some(parsed)) => now = parsed,
@@ -171,6 +168,11 @@ fn run_automation_loop(
                 }
             } else {
                 send_log(&log_tx, "Points ROI rectangle is not configured.");
+            }
+                sleep_with_stop(Duration::from_millis(cfg.backspace_delay_ms), &stop_flag);
+                let _ = background.press_backspace();
+                sleep_with_stop(Duration::from_millis(300), &stop_flag);
+                let _ = background.press_enter();
             }
 
             let gained = now.saturating_sub(prev);
