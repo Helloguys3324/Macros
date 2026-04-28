@@ -150,9 +150,10 @@ impl eframe::App for OverlayApp {
                     if ctx.input(|i| i.pointer.primary_clicked()) {
                         if let Some(pos) = pointer_pos {
                             if let Ok(mut guard) = self.shared_result.lock() {
+                                let ppp = ctx.pixels_per_point();
                                 *guard = Some(OverlayResult::Point {
-                                    x: pos.x.round() as i32,
-                                    y: pos.y.round() as i32,
+                                    x: (pos.x * ppp).round() as i32,
+                                    y: (pos.y * ppp).round() as i32,
                                 });
                             }
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -186,11 +187,12 @@ impl eframe::App for OverlayApp {
                             let h = (a.y - b.y).abs();
                             if w >= 3.0 && h >= 3.0 {
                                 if let Ok(mut guard) = self.shared_result.lock() {
+                                    let ppp = ctx.pixels_per_point();
                                     *guard = Some(OverlayResult::Rect {
-                                        x: left.round() as u32,
-                                        y: top.round() as u32,
-                                        w: w.round() as u32,
-                                        h: h.round() as u32,
+                                        x: (left * ppp).round() as u32,
+                                        y: (top * ppp).round() as u32,
+                                        w: (w * ppp).round() as u32,
+                                        h: (h * ppp).round() as u32,
                                     });
                                 }
                             }

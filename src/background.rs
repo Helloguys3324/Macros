@@ -12,11 +12,12 @@ mod imp {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        KEYEVENTF_UNICODE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-        VK_BACK, VK_CONTROL, VK_RETURN,
+        KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, VK_BACK, VK_CONTROL, VK_RETURN,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, SetForegroundWindow,
+        FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
 
     pub struct BackgroundInput {
@@ -37,17 +38,34 @@ mod imp {
         }
 
         pub fn click_search_field(&self, x: i32, y: i32) -> Result<()> {
-            use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
-
             unsafe {
                 SetForegroundWindow(self.hwnd);
             }
             thread::sleep(Duration::from_millis(150));
 
-            unsafe {
-                SetCursorPos(x, y)?;
-            }
+            // Use virtual screen metrics for multi-monitor support
+            let virtual_x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+            let virtual_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+            let screen_w = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+            let screen_h = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+
+            // Calculate absolute coordinates based on the entire virtual desktop
+            let abs_x = (((x - virtual_x) as f32 / screen_w as f32) * 65535.0) as i32;
+            let abs_y = (((y - virtual_y) as f32 / screen_h as f32) * 65535.0) as i32;
+
+            // Move the mouse using absolute virtual desktop coordinates (hardware level)
+            self.send_mouse_input(
+                abs_x,
+                abs_y,
+                MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+            )?;
             thread::sleep(Duration::from_millis(100));
+
+            // Jiggle the mouse relative by 1 pixel to force the game engine to focus the cursor
+            self.send_mouse_input(1, 1, MOUSEEVENTF_MOVE)?;
+            thread::sleep(Duration::from_millis(20));
+            self.send_mouse_input(-1, -1, MOUSEEVENTF_MOVE)?;
+            thread::sleep(Duration::from_millis(50));
 
             for _ in 0..2 {
                 self.send_mouse_input(0, 0, MOUSEEVENTF_LEFTDOWN)?;
