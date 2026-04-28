@@ -127,7 +127,7 @@ fn run_automation_loop(
                     let _ = background.type_text(&clean_name);
                     sleep_with_stop(Duration::from_millis(1200), &stop_flag);
                     let _ = background.press_backspace();
-                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
+                    sleep_with_stop(Duration::from_millis(300), &stop_flag);
                     let _ = background.press_enter();
                 }
             } else {
