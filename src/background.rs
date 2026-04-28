@@ -110,6 +110,20 @@ mod imp {
             Ok(())
         }
 
+        pub fn press_backspace(&self) -> Result<()> {
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
+
+            self.send_key_input(VK_BACK.0, empty_flags)?;
+            thread::sleep(Duration::from_millis(50));
+            self.send_key_input(VK_BACK.0, KEYEVENTF_KEYUP)?;
+            thread::sleep(Duration::from_millis(50));
+
+            Ok(())
+        }
+
         pub fn press_enter(&self) -> Result<()> {
             unsafe {
                 SetForegroundWindow(self.hwnd);
@@ -195,6 +209,10 @@ mod imp {
         }
 
         pub fn type_text(&self, _text: &str) -> Result<()> {
+            bail!("Not supported on this platform")
+        }
+
+        pub fn press_backspace(&self) -> Result<()> {
             bail!("Not supported on this platform")
         }
 
