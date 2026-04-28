@@ -53,8 +53,13 @@ impl OcrEngine {
         let image = GrayImage::from_raw(roi_w, roi_h, gray_roi.to_vec())
             .ok_or_else(|| anyhow!("Invalid grayscale ROI buffer"))?;
 
+        // Save debug image of what was captured directly from screen
+        let _ = image.save("debug_raw_roi.png");
+
         let resized =
             image::imageops::resize(&image, self.input_w, self.input_h, FilterType::Triangle);
+
+        let mut debug_bin = GrayImage::new(self.input_w, self.input_h);
 
         let mut input = Array4::<f32>::zeros((1, 3, self.input_h as usize, self.input_w as usize));
 
@@ -64,7 +69,10 @@ impl OcrEngine {
 
                 // Use user-defined threshold. Text is bright green, background is dark.
                 // We want the bright text to become black (0.0) and dark background to become white (255.0).
+                // If it's a white text background, text is usually > 150.
                 let binarized = if px >= threshold { 0.0 } else { 255.0 };
+
+                debug_bin.put_pixel(x, y, image::Luma([binarized as u8]));
 
                 // Normalize to [-1.0, 1.0]
                 let norm = (binarized / 255.0 - 0.5) / 0.5;
@@ -74,6 +82,9 @@ impl OcrEngine {
                 }
             }
         }
+
+        // Save debug image of what the OCR model is actually seeing
+        let _ = debug_bin.save("debug_binarized_roi.png");
 
         let input_tensor =
             TensorRef::from_array_view(input.view()).map_err(|e| anyhow!(e.to_string()))?;

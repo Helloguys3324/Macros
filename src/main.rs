@@ -9,6 +9,12 @@ mod overlay;
 mod ui;
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        // Force the process to be DPI aware so screen captures and mouse movements match 1:1 hardware pixels
+        let _ = windows::Win32::UI::HiDpi::SetProcessDPIAware();
+    }
+
     if let Err(err) = run() {
         eprintln!("fatal: {}", err);
         std::process::exit(1);
