@@ -119,7 +119,7 @@ fn run_automation_loop(
                     sleep_with_stop(Duration::from_millis(250), &stop_flag);
                     let clean_name = name.trim().replace(|c: char| c.is_whitespace(), "");
                     let _ = background.type_text(&clean_name);
-                    sleep_with_stop(Duration::from_millis(150), &stop_flag);
+                    sleep_with_stop(Duration::from_millis(500), &stop_flag);
                     let _ = background.press_backspace();
                     sleep_with_stop(Duration::from_millis(150), &stop_flag);
                     let _ = background.press_enter();
