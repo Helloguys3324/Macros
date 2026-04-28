@@ -12,7 +12,7 @@ mod imp {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        KEYEVENTF_UNICODE, KEYEVENTF_SCANCODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
         MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, VK_BACK, VK_CONTROL, VK_RETURN,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -116,9 +116,9 @@ mod imp {
             }
             let empty_flags = KEYBD_EVENT_FLAGS(0);
 
-            self.send_key_input(VK_BACK.0, empty_flags)?;
+            self.send_scancode(0x0E, empty_flags)?;
             thread::sleep(Duration::from_millis(50));
-            self.send_key_input(VK_BACK.0, KEYEVENTF_KEYUP)?;
+            self.send_scancode(0x0E, KEYEVENTF_KEYUP)?;
             thread::sleep(Duration::from_millis(50));
 
             Ok(())
@@ -186,6 +186,21 @@ mod imp {
             }
             Ok(())
         }
+
+        fn send_scancode(&self, scancode: u16, flags: KEYBD_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.r#type = INPUT_KEYBOARD;
+            input.Anonymous.ki.wScan = scancode;
+            input.Anonymous.ki.dwFlags = flags | KEYEVENTF_SCANCODE;
+
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for scancode {}", scancode);
+                }
+            }
+            Ok(())
+        }
+
     }
 }
 
