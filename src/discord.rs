@@ -1,13 +1,22 @@
 use crate::models::ScanSummary;
 use anyhow::Result;
 use chrono::Local;
+use reqwest::multipart;
 use serde_json::json;
 
 pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()> {
     let mut online_lines = String::new();
     let mut offline_lines = String::new();
 
+    let current_time = Local::now().format("%Y-%m-%d %H:%M").to_string();
+    let mut csv_data = String::from("Timestamp,Roblox,Contribution\n");
+
     for row in &summary.rows {
+        csv_data.push_str(&format!(
+            "{},{},{}\n",
+            current_time, row.name, row.gained_points
+        ));
+
         let line = format!(
             "{} | {} -> {} | +{}\n",
             row.name, row.prev_points, row.now_points, row.gained_points
@@ -41,10 +50,14 @@ pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()
         }]
     });
 
+    let form = multipart::Form::new()
+        .text("payload_json", serde_json::to_string(&payload)?)
+        .part("file", multipart::Part::text(csv_data).file_name("export.csv"));
+
     let client = reqwest::Client::new();
     client
         .post(webhook_url)
-        .json(&payload)
+        .multipart(form)
         .send()
         .await?
         .error_for_status()?;

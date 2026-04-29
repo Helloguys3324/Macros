@@ -156,7 +156,11 @@ impl eframe::App for ClanTrackerApp {
 
             ui.separator();
             ui.label("Clan Members (one name per line):");
-            ui.add(egui::TextEdit::multiline(&mut self.members_text).desired_rows(10));
+            egui::ScrollArea::vertical()
+                .max_height(150.0)
+                .show(ui, |ui| {
+                    ui.add(egui::TextEdit::multiline(&mut self.members_text).desired_rows(10));
+                });
             ui.label("Names File Path:");
             ui.text_edit_singleline(&mut self.cfg.members_file);
             ui.horizontal(|ui| {
