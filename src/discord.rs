@@ -18,7 +18,7 @@ pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()
     for row in &summary.rows {
         csv_data.push_str(&format!(
             "{},\"{}\",{}\n",
-            current_time, row.name.replace('"', """"), row.gained_points
+            current_time, row.name.replace('"', "\"\""), row.gained_points
         ));
 
         let line = format!(

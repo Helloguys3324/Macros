@@ -159,7 +159,7 @@ impl eframe::App for ClanTrackerApp {
             egui::ScrollArea::vertical()
                   .max_height(100.0)
                   .auto_shrink([false, false])
-                  .id_source("members_scroll")
+                  .id_salt("members_scroll")
                   .show(ui, |ui| {
                       ui.add(
                           egui::TextEdit::multiline(&mut self.members_text)
