@@ -41,7 +41,7 @@ impl Default for AppConfig {
             game_window_title: "Roblox".to_string(),
             search_field: None,
             number_roi: None,
-            scan_delay_ms: 500,
+            scan_delay_ms: 0,
             backspace_delay_ms: 1200,
             interval_secs: 420,
             ocr_threshold: 150,

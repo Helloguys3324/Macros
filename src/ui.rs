@@ -197,7 +197,7 @@ impl eframe::App for ClanTrackerApp {
 
             ui.horizontal(|ui| {
                 ui.label("Scan Delay (ms):");
-                ui.add(egui::DragValue::new(&mut self.cfg.scan_delay_ms).range(100..=10_000));
+                ui.add(egui::DragValue::new(&mut self.cfg.scan_delay_ms).range(0..=10_000));
                 ui.label("Backspace Delay (ms):");
                 ui.add(egui::DragValue::new(&mut self.cfg.backspace_delay_ms).range(100..=10_000));
                 ui.label("Loop Interval (sec):");
