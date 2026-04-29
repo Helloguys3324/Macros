@@ -7,7 +7,6 @@ use serde_json::json;
 pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()> {
     let mut online_lines = String::new();
     let mut offline_lines = String::new();
-    let mut full_txt_report = String::new();
 
     let current_time = Local::now().format("%Y-%m-%d %H:%M").to_string();
     let mut csv_data = String::from("Timestamp,Roblox,Contribution\n");
@@ -15,18 +14,28 @@ pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()
     let mut online_count = 0;
     let mut offline_count = 0;
 
+    let mut changed_members = Vec::new();
+    let mut unchanged_members = Vec::new();
+    let mut not_in_guild = Vec::new();
+
     for row in &summary.rows {
         csv_data.push_str(&format!(
             "{},\"{}\",{}\n",
-            current_time, row.name.replace('"', "\"\""), row.gained_points
+            current_time, row.name.replace('"', "\"\""), row.now_points
         ));
 
         let line = format!(
             "{} | {} -> {} | +{}\n",
             row.name, row.prev_points, row.now_points, row.gained_points
         );
-        
-        full_txt_report.push_str(&line);
+
+        if row.now_points == 0 {
+            not_in_guild.push(format!("{} | Not in Guild\n", row.name));
+        } else if row.gained_points != 0 {
+            changed_members.push(line.clone());
+        } else {
+            unchanged_members.push(line.clone());
+        }
 
         if row.online {
             online_count += 1;
@@ -39,6 +48,28 @@ pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()
                 offline_lines.push_str(&line);
             }
         }
+    }
+
+    let mut full_txt_report = String::new();
+    full_txt_report.push_str("--- MEMBERS WITH CHANGES ---\n");
+    if changed_members.is_empty() {
+        full_txt_report.push_str("None\n");
+    } else {
+        for m in changed_members { full_txt_report.push_str(&m); }
+    }
+
+    full_txt_report.push_str("\n--- MEMBERS WITH NO CHANGES ---\n");
+    if unchanged_members.is_empty() {
+        full_txt_report.push_str("None\n");
+    } else {
+        for m in unchanged_members { full_txt_report.push_str(&m); }
+    }
+
+    full_txt_report.push_str("\n--- NOT IN GUILD (0 POINTS) ---\n");
+    if not_in_guild.is_empty() {
+        full_txt_report.push_str("None\n");
+    } else {
+        for m in not_in_guild { full_txt_report.push_str(&m); }
     }
 
     if online_count > 0 && online_lines.len() >= 900 {
