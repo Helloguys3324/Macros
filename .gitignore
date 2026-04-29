@@ -1,0 +1,15 @@
+# Rust build artifacts
+/target/
+
+# Packaged release outputs
+/dist/
+/clan-tracking-bot-windows/
+/clan-tracking-bot-windows.zip
+
+# Local runtime state
+/config.json
+/points_state.json
+
+# Common noise
+*.log
+*.tmp
