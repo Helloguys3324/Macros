@@ -52,7 +52,7 @@ pub async fn send_summary(webhook_url: &str, summary: &ScanSummary) -> Result<()
 
     let form = multipart::Form::new()
         .text("payload_json", serde_json::to_string(&payload)?)
-        .part("file", multipart::Part::text(csv_data).file_name("export.csv"));
+        .part("file", multipart::Part::text(csv_data).file_name("export.csv").mime_str("text/csv")?);
 
     let client = reqwest::Client::new();
     client
