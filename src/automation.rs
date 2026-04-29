@@ -125,6 +125,10 @@ fn run_automation_loop(
                     send_log(&log_tx, format!("Raw name bytes for input: {:?}", raw_bytes));
 
                     let _ = background.type_text(&clean_name);
+                    sleep_with_stop(Duration::from_millis(1200), &stop_flag);
+                    let _ = background.press_backspace();
+                    sleep_with_stop(Duration::from_millis(1000), &stop_flag);
+                    let _ = background.press_enter();
                 }
             } else {
                 send_log(&log_tx, "Search field point is not configured.");
