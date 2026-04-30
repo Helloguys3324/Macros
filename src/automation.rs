@@ -143,11 +143,12 @@ fn run_automation_loop(
                     Ok(gray) => match ocr.read_points(&gray, roi.w, roi.h, cfg.ocr_threshold) {
                         Ok(Some(parsed)) => now = parsed,
                         Ok(None) => {
+                            now = 0;
                             send_log(
                                 &log_tx,
                                 format!(
-                                    "OCR warning for {}: unreadable text, keeping previous value ({})",
-                                    name, prev
+                                    "OCR: {} not detected (setting to 0 points)",
+                                    name
                                 ),
                             );
                         }

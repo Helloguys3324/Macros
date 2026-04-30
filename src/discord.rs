@@ -1,21 +1,16 @@
 use crate::models::ScanSummary;
 use anyhow::Result;
-use chrono::Local;
+use chrono::{Utc, FixedOffset};
 use reqwest::multipart;
 
 const WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1498387529626288232/shZTKC3qAzqVGOahutESnGQjKnenoHnUvLleopX7b9SOnqkTTWMI8FFZ9L6AY8Q-X0ai";
 
 pub async fn send_summary(_webhook_url: &str, summary: &ScanSummary) -> Result<()> {
-    let now = Local::now();
-    let current_time = now.format("%Y-%m-%d %H:%M").to_string();
-
-    let offset = now.offset();
-    let hours = offset.local_minus_utc() / 3600;
-    let timezone = if hours >= 0 {
-        format!("GMT+{}", hours)
-    } else {
-        format!("GMT{}", hours)
-    };
+    let now = Utc::now();
+    let gmt8 = FixedOffset::west_opt(8 * 3600).unwrap();
+    let now_gmt8 = now.with_timezone(&gmt8);
+    let current_time = now_gmt8.format("%Y-%m-%d %H:%M").to_string();
+    let timezone = "GMT-8";
     
     let mut csv_data = String::from("Timestamp,Timezone,Roblox,Contribution\n");
 
