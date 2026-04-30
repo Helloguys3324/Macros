@@ -20,7 +20,6 @@ pub struct Roi {
 pub struct AppConfig {
     pub members: Vec<String>,
     pub members_file: String,
-    pub webhook_url: String,
     pub game_window_title: String,
     pub search_field: Option<Point>,
     pub number_roi: Option<Roi>,
@@ -36,7 +35,6 @@ impl Default for AppConfig {
         Self {
             members: Vec::new(),
             members_file: "members.txt".to_string(),
-            webhook_url: String::new(),
             game_window_title: "Roblox".to_string(),
             search_field: None,
             number_roi: None,

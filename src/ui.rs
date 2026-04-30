@@ -199,9 +199,6 @@ impl eframe::App for ClanTrackerApp {
             });
 
             ui.separator();
-            ui.label("Discord Webhook URL:");
-            ui.text_edit_singleline(&mut self.cfg.webhook_url);
-
             ui.label("Game Window Title (exact):");
             ui.text_edit_singleline(&mut self.cfg.game_window_title);
 

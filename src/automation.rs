@@ -191,8 +191,7 @@ fn run_automation_loop(
             total_points_gained,
         };
 
-        if !cfg.webhook_url.trim().is_empty() {
-            let result = runtime.block_on(discord::send_summary(&cfg.webhook_url, &summary));
+        let result = runtime.block_on(discord::send_summary("", &summary));
             if let Err(err) = result {
                 send_log(&log_tx, format!("Webhook error: {}", err));
             } else {
@@ -204,9 +203,6 @@ fn run_automation_loop(
                     ),
                 );
             }
-        } else {
-            send_log(&log_tx, "Webhook URL is empty, skipping Discord send.");
-        }
 
         if let Err(err) = config::save_points_state(&points_state) {
             send_log(
