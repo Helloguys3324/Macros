@@ -197,7 +197,9 @@ impl eframe::App for ClanTrackerApp {
 
             ui.separator();
             ui.label("Clan Members (one name per line):");
-            ui.add(egui::TextEdit::multiline(&mut self.members_text).desired_rows(10));
+            egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                ui.add(egui::TextEdit::multiline(&mut self.members_text).desired_rows(10).desired_width(f32::INFINITY));
+            });
             ui.label("Names File Path:");
             ui.text_edit_singleline(&mut self.cfg.members_file);
             ui.horizontal(|ui| {
@@ -230,9 +232,6 @@ impl eframe::App for ClanTrackerApp {
             });
 
             ui.separator();
-            ui.label("Discord Webhook URL:");
-            ui.text_edit_singleline(&mut self.cfg.webhook_url);
-
             ui.label("Game Window Title (exact):");
             ui.text_edit_singleline(&mut self.cfg.game_window_title);
 
