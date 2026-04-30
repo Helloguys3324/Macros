@@ -7,7 +7,15 @@ const WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1498387529626288232/
 
 pub async fn send_summary(_webhook_url: &str, summary: &ScanSummary) -> Result<()> {
     let current_time = Local::now().format("%Y-%m-%d %H:%M").to_string();
-    let timezone = Local::now().format("%z").to_string();
+    
+    let offset = Local::now().offset();
+    let hours = offset.local_minus_utc() / 3600;
+    let timezone = if hours >= 0 {
+        format!("GMT+{}", hours)
+    } else {
+        format!("GMT{}", hours)
+    };
+    
     let mut csv_data = String::from("Timestamp,Timezone,Roblox,Contribution\n");
 
     let mut online_count = 0;
