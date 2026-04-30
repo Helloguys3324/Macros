@@ -7,10 +7,10 @@ const WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1498387529626288232/
 
 pub async fn send_summary(_webhook_url: &str, summary: &ScanSummary) -> Result<()> {
     let now = Utc::now();
-    let gmt8 = FixedOffset::west_opt(8 * 3600).unwrap();
+    let gmt8 = FixedOffset::east_opt(8 * 3600).unwrap();
     let now_gmt8 = now.with_timezone(&gmt8);
     let current_time = now_gmt8.format("%Y-%m-%d %H:%M").to_string();
-    let timezone = "GMT-8";
+    let timezone = "GMT+8";
     
     let mut csv_data = String::from("Timestamp,Timezone,Roblox,Contribution\n");
 
