@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Context, Result};
-use image::{imageops::FilterType, GrayImage};
+use image::{imageops::FilterType, GrayImage, Luma};
 use ndarray::{Array4, ArrayViewD};
 use ort::{
     session::{builder::GraphOptimizationLevel, Session},
     value::TensorRef,
 };
 use std::fs;
+use std::cmp;
 
 pub struct OcrEngine {
     session: Session,
@@ -53,30 +54,119 @@ impl OcrEngine {
         let image = GrayImage::from_raw(roi_w, roi_h, gray_roi.to_vec())
             .ok_or_else(|| anyhow!("Invalid grayscale ROI buffer"))?;
 
-        let resized = image::imageops::resize(
-            &image,
-            self.input_w,
-            self.input_h,
-            FilterType::Triangle,
-        );
+        // Save debug image of what was captured directly from screen
+        let _ = image.save("debug_raw_roi.png");
 
-        let mut input = Array4::<f32>::zeros((
-            1,
-            3,
-            self.input_h as usize,
-            self.input_w as usize,
-        ));
+        // Advanced Auto-Cropping to isolate the main text
+        // 1. Horizontal projection (find rows with pixels >= threshold)
+        let mut row_counts = vec![0; roi_h as usize];
+        for y in 0..roi_h {
+            for x in 0..roi_w {
+                if image.get_pixel(x, y).0[0] >= threshold {
+                    row_counts[y as usize] += 1;
+                }
+            }
+        }
 
-        for y in 0..self.input_h {
-            for x in 0..self.input_w {
-                let px = resized.get_pixel(x, y).0[0];
-                let bw = if px >= threshold { 255.0 } else { 0.0 };
-                let norm = (bw / 255.0 - 0.5) / 0.5;
+        // 2. Find continuous blocks of text
+        let mut segments: Vec<(u32, u32)> = Vec::new();
+        let mut start_y = None;
+        for y in 0..roi_h {
+            if row_counts[y as usize] > 3 { // Ignore thin noise like the vertical bar |
+                if start_y.is_none() {
+                    start_y = Some(y);
+                }
+            } else {
+                if let Some(sy) = start_y {
+                    segments.push((sy, y));
+                    start_y = None;
+                }
+            }
+        }
+        if let Some(sy) = start_y {
+            segments.push((sy, roi_h));
+        }
+
+        // 3. Find the largest text block (which should be "2.1K")
+        let best_segment = segments.into_iter().max_by_key(|&(sy, ey)| ey - sy);
+
+        let (crop_y1, crop_y2) = match best_segment {
+            Some(seg) => seg,
+            None => (0, roi_h) // Fallback if no text found
+        };
+
+        // 4. Vertical projection within that block to find X boundaries
+        let mut min_x = roi_w;
+        let mut max_x = 0;
+        for y in crop_y1..crop_y2 {
+            for x in 0..roi_w {
+                if image.get_pixel(x, y).0[0] >= threshold {
+                    if x < min_x { min_x = x; }
+                    if x > max_x { max_x = x; }
+                }
+            }
+        }
+
+        if min_x > max_x {
+            min_x = 0;
+            max_x = roi_w;
+        }
+
+        // 5. Add a 15% margin
+        let w = max_x - min_x;
+        let h = crop_y2 - crop_y1;
+        let margin_x = (w as f32 * 0.15) as u32;
+        let margin_y = (h as f32 * 0.15) as u32;
+
+        let final_x = min_x.saturating_sub(margin_x);
+        let final_y = crop_y1.saturating_sub(margin_y);
+        let final_w = cmp::min(max_x + margin_x - final_x, roi_w - final_x);
+        let final_h = cmp::min(crop_y2 + margin_y - final_y, roi_h - final_y);
+
+        let cropped = image::imageops::crop_imm(&image, final_x, final_y, final_w, final_h).to_image();
+        let _ = cropped.save("debug_cropped.png"); // Save what we actually crop
+
+        // Calculate padding to preserve aspect ratio
+        let target_h = self.input_h;
+        let target_w = self.input_w;
+
+        // Scale to 48px height, preserve width
+        let scale = target_h as f32 / cropped.height() as f32;
+        let scaled_w = (cropped.width() as f32 * scale).round() as u32;
+
+        let resized =
+            image::imageops::resize(&cropped, scaled_w, target_h, FilterType::Triangle);
+
+        let mut debug_bin = GrayImage::new(target_w, target_h);
+
+        let mut input = Array4::<f32>::zeros((1, 3, target_h as usize, target_w as usize));
+
+        for y in 0..target_h {
+            for x in 0..target_w {
+                let px = if x < scaled_w {
+                    resized.get_pixel(x, y).0[0]
+                } else {
+                    // Fill padding with background color (dark) so it becomes white after binarization
+                    0
+                };
+
+                // Use user-defined threshold. Text is bright green, background is dark.
+                // We want the bright text to become black (0.0) and dark background to become white (255.0).
+                let binarized = if px >= threshold { 0.0 } else { 255.0 };
+
+                debug_bin.put_pixel(x, y, Luma([binarized as u8]));
+
+                // Normalize to [-1.0, 1.0]
+                let norm = (binarized / 255.0 - 0.5) / 0.5;
+
                 for ch in 0..3 {
                     input[[0, ch, y as usize, x as usize]] = norm;
                 }
             }
         }
+
+        // Save debug image of what the OCR model is actually seeing
+        let _ = debug_bin.save("debug_binarized_roi.png");
 
         let input_tensor =
             TensorRef::from_array_view(input.view()).map_err(|e| anyhow!(e.to_string()))?;
@@ -95,12 +185,7 @@ impl OcrEngine {
             _ => return Err(anyhow!("Unexpected OCR output shape: {:?}", shape)),
         };
 
-        let digits: String = decoded.chars().filter(|c| c.is_ascii_digit()).collect();
-        if digits.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(digits.parse::<u32>().ok())
+        Ok(parse_points(&decoded))
     }
 }
 
@@ -168,3 +253,38 @@ fn decode_ctc_2d(
     out
 }
 
+fn parse_points(s: &str) -> Option<u32> {
+    let mut cleaned = String::new();
+    let mut multiplier = 1f64;
+
+    for mut c in s.chars() {
+        match c {
+            'O' | 'o' => c = '0',
+            'l' | 'I' => c = '1',
+            _ => {}
+        }
+
+        if c.is_ascii_digit() || c == '.' {
+            cleaned.push(c);
+        } else if c == ',' {
+            // skip
+        } else if c.eq_ignore_ascii_case(&'k') {
+            multiplier = 1_000.0;
+        } else if c.eq_ignore_ascii_case(&'m') {
+            multiplier = 1_000_000.0;
+        } else if c.eq_ignore_ascii_case(&'b') {
+            multiplier = 1_000_000_000.0;
+        }
+    }
+
+    if cleaned.is_empty() || cleaned == "." {
+        return None;
+    }
+
+    if let Ok(val) = cleaned.parse::<f64>() {
+        let total = val * multiplier;
+        Some(total as u32)
+    } else {
+        None
+    }
+}

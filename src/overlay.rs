@@ -32,6 +32,7 @@ pub fn try_run_overlay_from_cli() -> Result<bool> {
     Ok(false)
 }
 
+#[allow(dead_code)]
 pub fn select_search_field_point() -> Result<Point> {
     let result = run_overlay_subprocess("point")?;
     match result {
@@ -40,6 +41,7 @@ pub fn select_search_field_point() -> Result<Point> {
     }
 }
 
+#[allow(dead_code)]
 pub fn select_number_roi_rect() -> Result<Roi> {
     let result = run_overlay_subprocess("rect")?;
     match result {
@@ -48,12 +50,10 @@ pub fn select_number_roi_rect() -> Result<Roi> {
     }
 }
 
+#[allow(dead_code)]
 fn run_overlay_subprocess(mode: &str) -> Result<OverlayResult> {
     let exe = env::current_exe()?;
-    let output = Command::new(exe)
-        .arg("--overlay")
-        .arg(mode)
-        .output()?;
+    let output = Command::new(exe).arg("--overlay").arg(mode).output()?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -150,9 +150,10 @@ impl eframe::App for OverlayApp {
                     if ctx.input(|i| i.pointer.primary_clicked()) {
                         if let Some(pos) = pointer_pos {
                             if let Ok(mut guard) = self.shared_result.lock() {
+                                let ppp = ctx.pixels_per_point();
                                 *guard = Some(OverlayResult::Point {
-                                    x: pos.x.round() as i32,
-                                    y: pos.y.round() as i32,
+                                    x: (pos.x * ppp).round() as i32,
+                                    y: (pos.y * ppp).round() as i32,
                                 });
                             }
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -186,11 +187,12 @@ impl eframe::App for OverlayApp {
                             let h = (a.y - b.y).abs();
                             if w >= 3.0 && h >= 3.0 {
                                 if let Ok(mut guard) = self.shared_result.lock() {
+                                    let ppp = ctx.pixels_per_point();
                                     *guard = Some(OverlayResult::Rect {
-                                        x: left.round() as u32,
-                                        y: top.round() as u32,
-                                        w: w.round() as u32,
-                                        h: h.round() as u32,
+                                        x: (left * ppp).round() as u32,
+                                        y: (top * ppp).round() as u32,
+                                        w: (w * ppp).round() as u32,
+                                        h: (h * ppp).round() as u32,
                                     });
                                 }
                             }
@@ -200,28 +202,32 @@ impl eframe::App for OverlayApp {
                 }
             }
 
-            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-                ui.add_space(20.0);
-                match self.mode {
-                    OverlayMode::Point => {
-                        ui.label(
-                            egui::RichText::new("Click to set Search Field Position (Esc to cancel)")
+            ui.with_layout(
+                egui::Layout::top_down_justified(egui::Align::Center),
+                |ui| {
+                    ui.add_space(20.0);
+                    match self.mode {
+                        OverlayMode::Point => {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Click to set Search Field Position (Esc to cancel)",
+                                )
                                 .color(egui::Color32::WHITE)
                                 .strong(),
-                        );
+                            );
+                        }
+                        OverlayMode::Rect => {
+                            ui.label(
+                                egui::RichText::new(
+                                    "Drag to set Points ROI Rectangle (Esc to cancel)",
+                                )
+                                .color(egui::Color32::WHITE)
+                                .strong(),
+                            );
+                        }
                     }
-                    OverlayMode::Rect => {
-                        ui.label(
-                            egui::RichText::new(
-                                "Drag to set Points ROI Rectangle (Esc to cancel)",
-                            )
-                            .color(egui::Color32::WHITE)
-                            .strong(),
-                        );
-                    }
-                }
-            });
+                },
+            );
         });
     }
 }
-

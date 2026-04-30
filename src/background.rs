@@ -4,13 +4,20 @@ use anyhow::{bail, Result};
 mod imp {
     use super::*;
     use std::ffi::OsStr;
+    use std::mem::size_of;
     use std::os::windows::ffi::OsStrExt;
+    use std::thread;
+    use std::time::Duration;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
-    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_BACK, VK_CONTROL, VK_RETURN};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        KEYEVENTF_UNICODE, KEYEVENTF_SCANCODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, VK_BACK, VK_CONTROL, VK_RETURN,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetWindowRect, PostMessageW, WM_CHAR, WM_KEYDOWN, WM_KEYUP,
-        WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+        FindWindowW, GetSystemMetrics, SetForegroundWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     };
 
     pub struct BackgroundInput {
@@ -31,66 +38,169 @@ mod imp {
         }
 
         pub fn click_search_field(&self, x: i32, y: i32) -> Result<()> {
-            let (cx, cy) = self.screen_to_client(x, y)?;
-            let lp = make_mouse_lparam(cx, cy);
-            self.post(WM_MOUSEMOVE, WPARAM(0), lp)?;
-            self.post(WM_LBUTTONDOWN, WPARAM(1), lp)?;
-            self.post(WM_LBUTTONUP, WPARAM(0), lp)?;
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            thread::sleep(Duration::from_millis(150));
+
+            // Use virtual screen metrics for multi-monitor support
+            let virtual_x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+            let virtual_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+            let screen_w = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+            let screen_h = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+
+            // Calculate absolute coordinates based on the entire virtual desktop
+            let abs_x = (((x - virtual_x) as f32 / screen_w as f32) * 65535.0) as i32;
+            let abs_y = (((y - virtual_y) as f32 / screen_h as f32) * 65535.0) as i32;
+
+            // Move the mouse using absolute virtual desktop coordinates (hardware level)
+            self.send_mouse_input(
+                abs_x,
+                abs_y,
+                MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+            )?;
+            thread::sleep(Duration::from_millis(100));
+
+            // Jiggle the mouse relative by 1 pixel to force the game engine to focus the cursor
+            self.send_mouse_input(1, 1, MOUSEEVENTF_MOVE)?;
+            thread::sleep(Duration::from_millis(20));
+            self.send_mouse_input(-1, -1, MOUSEEVENTF_MOVE)?;
+            thread::sleep(Duration::from_millis(50));
+
+            for _ in 0..2 {
+                self.send_mouse_input(0, 0, MOUSEEVENTF_LEFTDOWN)?;
+                thread::sleep(Duration::from_millis(50));
+                self.send_mouse_input(0, 0, MOUSEEVENTF_LEFTUP)?;
+                thread::sleep(Duration::from_millis(50));
+            }
+
             Ok(())
         }
 
         pub fn clear_search_field(&self) -> Result<()> {
-            self.key_down(VK_CONTROL.0 as u16)?;
-            self.key_down(0x41)?;
-            self.key_up(0x41)?;
-            self.key_up(VK_CONTROL.0 as u16)?;
-            self.key_down(VK_BACK.0 as u16)?;
-            self.key_up(VK_BACK.0 as u16)?;
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
+            self.send_key_input(VK_CONTROL.0, empty_flags)?;
+            thread::sleep(Duration::from_millis(20));
+            self.send_key_input(0x41, empty_flags)?; // 'A'
+            thread::sleep(Duration::from_millis(20));
+            self.send_key_input(0x41, KEYEVENTF_KEYUP)?;
+            thread::sleep(Duration::from_millis(20));
+            self.send_key_input(VK_CONTROL.0, KEYEVENTF_KEYUP)?;
+            thread::sleep(Duration::from_millis(20));
+            self.send_key_input(VK_BACK.0, empty_flags)?;
+            thread::sleep(Duration::from_millis(20));
+            self.send_key_input(VK_BACK.0, KEYEVENTF_KEYUP)?;
             Ok(())
         }
 
         pub fn type_text(&self, text: &str) -> Result<()> {
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
             for ch in text.encode_utf16() {
-                self.post(WM_CHAR, WPARAM(ch as usize), LPARAM(1))?;
+                self.send_unicode_char(ch, empty_flags)?;
+                thread::sleep(Duration::from_millis(15));
+                self.send_unicode_char(ch, KEYEVENTF_KEYUP)?;
+                thread::sleep(Duration::from_millis(15));
             }
             Ok(())
         }
 
+        pub fn press_backspace(&self) -> Result<()> {
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
+
+            self.send_scancode(0x0E, empty_flags)?;
+            thread::sleep(Duration::from_millis(100));
+            self.send_scancode(0x0E, KEYEVENTF_KEYUP)?;
+            thread::sleep(Duration::from_millis(100));
+
+            Ok(())
+        }
+
         pub fn press_enter(&self) -> Result<()> {
-            self.key_down(VK_RETURN.0 as u16)?;
-            self.key_up(VK_RETURN.0 as u16)?;
+            unsafe {
+                SetForegroundWindow(self.hwnd);
+            }
+            let empty_flags = KEYBD_EVENT_FLAGS(0);
+
+            // Only press enter once to prevent game engine quirks adding whitespace
+            self.send_key_input(VK_RETURN.0, empty_flags)?;
+            thread::sleep(Duration::from_millis(50));
+            self.send_key_input(VK_RETURN.0, KEYEVENTF_KEYUP)?;
+            thread::sleep(Duration::from_millis(50));
+
             Ok(())
         }
 
-        fn key_down(&self, vk: u16) -> Result<()> {
-            self.post(WM_KEYDOWN, WPARAM(vk as usize), LPARAM(1))
-        }
-
-        fn key_up(&self, vk: u16) -> Result<()> {
-            self.post(WM_KEYUP, WPARAM(vk as usize), LPARAM(0xC000_0001))
-        }
-
-        fn post(
+        fn send_mouse_input(
             &self,
-            msg: u32,
-            wparam: WPARAM,
-            lparam: LPARAM,
+            dx: i32,
+            dy: i32,
+            flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS,
         ) -> Result<()> {
-            unsafe { PostMessageW(self.hwnd, msg, wparam, lparam)? };
+            let mut input = INPUT::default();
+            input.r#type = INPUT_MOUSE;
+            input.Anonymous.mi.dx = dx;
+            input.Anonymous.mi.dy = dy;
+            input.Anonymous.mi.dwFlags = flags;
+
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for mouse");
+                }
+            }
             Ok(())
         }
 
-        fn screen_to_client(&self, x: i32, y: i32) -> Result<(i32, i32)> {
-            let mut rect = RECT::default();
-            unsafe { GetWindowRect(self.hwnd, &mut rect)? };
-            Ok((x - rect.left, y - rect.top))
-        }
-    }
+        fn send_key_input(&self, vk: u16, flags: KEYBD_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.r#type = INPUT_KEYBOARD;
+            input.Anonymous.ki.wVk = windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk);
+            input.Anonymous.ki.dwFlags = flags;
 
-    fn make_mouse_lparam(x: i32, y: i32) -> LPARAM {
-        let xw = (x as u32) & 0xFFFF;
-        let yw = (y as u32) & 0xFFFF;
-        LPARAM(((yw << 16) | xw) as isize)
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for key {}", vk);
+                }
+            }
+            Ok(())
+        }
+
+        fn send_unicode_char(&self, ch: u16, flags: KEYBD_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.r#type = INPUT_KEYBOARD;
+            input.Anonymous.ki.wScan = ch;
+            input.Anonymous.ki.dwFlags = flags | KEYEVENTF_UNICODE;
+
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for unicode char {}", ch);
+                }
+            }
+            Ok(())
+        }
+
+        fn send_scancode(&self, scancode: u16, flags: KEYBD_EVENT_FLAGS) -> Result<()> {
+            let mut input = INPUT::default();
+            input.r#type = INPUT_KEYBOARD;
+            input.Anonymous.ki.wScan = scancode;
+            input.Anonymous.ki.dwFlags = flags | KEYEVENTF_SCANCODE;
+
+            unsafe {
+                if SendInput(&[input], size_of::<INPUT>() as i32) != 1 {
+                    bail!("SendInput failed for scancode {}", scancode);
+                }
+            }
+            Ok(())
+        }
+
     }
 }
 
@@ -117,6 +227,10 @@ mod imp {
             bail!("Not supported on this platform")
         }
 
+        pub fn press_backspace(&self) -> Result<()> {
+            bail!("Not supported on this platform")
+        }
+
         pub fn press_enter(&self) -> Result<()> {
             bail!("Not supported on this platform")
         }
@@ -124,4 +238,3 @@ mod imp {
 }
 
 pub use imp::BackgroundInput;
-
